@@ -3,20 +3,53 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/chettriyuvraj/distributed-kv-store/distdb"
+	"github.com/chettriyuvraj/distributed-kv-store/distdbclient"
+)
+
+const (
+	SERVER = "server"
+	CLIENT = "client"
 )
 
 func main() {
-	db, err := distdb.NewDB()
-	if err != nil {
-		fmt.Printf("error initializing DB: %v", err)
-		return
+	if len(os.Args) < 2 {
+		log.Fatalf("usage: kv [client|server]")
 	}
-	defer db.Close()
+
+	switch os.Args[1] {
+	case SERVER:
+		runServer()
+	case CLIENT:
+		runClient()
+	default:
+		log.Fatalf("invalid argument")
+	}
+
+}
+
+func runServer() {
+	config := distdb.NewDBConfig(true)
+	db, err := distdb.NewDB(config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = db.Listen()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func runClient() {
+	client, err := distdbclient.NewClient()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
@@ -32,15 +65,10 @@ func main() {
 			}
 			/* Get key */
 			k := scanner.Bytes()
-			v, err := db.Get(k)
+			v, err := client.Get(k)
 			if err != nil {
-				if errors.Is(err, distdb.ErrKeyDoesNotExist) {
-					fmt.Println("Key does not exist")
-					continue
-				} else {
-					fmt.Printf("error retreiving key:val pair from db %v", err)
-					return
-				}
+				fmt.Println(err)
+				continue
 			}
 			fmt.Printf("\nVal is %s\n", string(v))
 
@@ -60,7 +88,7 @@ func main() {
 			}
 			v := scanner.Bytes()
 			/* Put key:val */
-			err := db.Put(k, v)
+			err := client.Put(k, v)
 			if err != nil {
 				fmt.Printf("error putting key:val pair into DB %v", err)
 				return
@@ -70,5 +98,4 @@ func main() {
 			fmt.Println("Invalid operation!")
 		}
 	}
-
 }
