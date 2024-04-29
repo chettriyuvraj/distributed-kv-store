@@ -55,3 +55,5 @@ func TestClientMakeRequest(t *testing.T) {
 	}
 
 }
+
+/* Note: ClientRcvResponse tested in db_test */
