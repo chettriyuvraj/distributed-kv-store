@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -88,6 +89,7 @@ func (db *DB) Listen() error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("Listening...")
 	defer server.Close()
 
 	for {
@@ -95,62 +97,67 @@ func (db *DB) Listen() error {
 		if err != nil {
 			return err
 		}
+		fmt.Println("Accepted Connection...")
 
 		go db.handleConn(clientConn)
 	}
 }
 
 func (db *DB) handleConn(conn net.Conn) error {
-	buffer := make([]byte, 1024)
+	for {
+		buffer := make([]byte, 1024)
 
-	/* Read client request */
-	clientMessageLen, err := conn.Read(buffer)
-	if err != nil {
-		return err
-	}
-
-	/* Unmarshal request sent as JSON */
-	var clientRequest Request
-	clientMessage := buffer[:clientMessageLen]
-	err = json.Unmarshal(clientMessage, &clientRequest)
-	if err != nil {
-		return err
-	}
-
-	/* Formulate response according to the operation requested */
-	var resp Response
-	switch clientRequest.Op {
-	case GET:
-		val, err := db.Get(clientRequest.Key)
+		/* Read client request */
+		clientMessageLen, err := conn.Read(buffer)
 		if err != nil {
-			resp.Error = err.Error()
-			resp.Status = FAILURE
-			break
+			return err
 		}
-		resp.Val = val
-		resp.Status = SUCCESS
-	case PUT:
-		err := db.Put(clientRequest.Key, clientRequest.Val)
+
+		/* Unmarshal request sent as JSON */
+		var clientRequest Request
+		clientMessage := buffer[:clientMessageLen]
+		err = json.Unmarshal(clientMessage, &clientRequest)
 		if err != nil {
-			resp.Error = err.Error()
-			resp.Status = FAILURE
-			break
+			return err
 		}
-		resp.Status = SUCCESS
-	default:
-		resp.Error = ErrInvalidOperation.Error()
-		resp.Status = FAILURE
-	}
 
-	/* Marshal response to JSON */
-	respData, err := json.Marshal(resp)
-	if err != nil {
-		return err
-	}
+		/* Formulate response according to the operation requested */
+		var resp Response
+		switch clientRequest.Op {
+		case GET:
+			fmt.Println("Handling GET request...")
+			val, err := db.Get(clientRequest.Key)
+			if err != nil {
+				resp.Error = err.Error()
+				resp.Status = FAILURE
+				break
+			}
+			resp.Val = val
+			resp.Status = SUCCESS
+		case PUT:
+			fmt.Println("Handling PUT request...")
+			err := db.Put(clientRequest.Key, clientRequest.Val)
+			if err != nil {
+				resp.Error = err.Error()
+				resp.Status = FAILURE
+				break
+			}
+			resp.Status = SUCCESS
+		default:
+			resp.Error = ErrInvalidOperation.Error()
+			resp.Status = FAILURE
+		}
 
-	/* Send response */
-	if _, err = conn.Write(respData); err != nil {
-		return err
+		/* Marshal response to JSON */
+		respData, err := json.Marshal(resp)
+		if err != nil {
+			return err
+		}
+
+		/* Send response */
+		if _, err = conn.Write(respData); err != nil {
+			return err
+		}
 	}
 
 	return nil
