@@ -1,4 +1,4 @@
-package client
+package distdbclient
 
 import (
 	"encoding/json"
