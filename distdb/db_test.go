@@ -1,12 +1,13 @@
 package distdb
 
 import (
-	"encoding/json"
 	"sync"
 	"testing"
 
-	"github.com/chettriyuvraj/distributed-kv-store/client"
+	"github.com/chettriyuvraj/distributed-kv-store/distdbclient"
+	"github.com/chettriyuvraj/distributed-kv-store/protobuf/github.com/chettriyuvraj/distributed-kv-store/communication"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestGetPut(t *testing.T) {
@@ -49,12 +50,12 @@ func TestHandleConn(t *testing.T) {
 
 	/* Start a new goroutine, with a new client for each request - TODO: error cases */
 	tcs := []struct {
-		req      Request
-		respWant Response
+		req      *communication.Request
+		respWant *communication.Response
 	}{
-		{req: Request{Key: []byte("key2"), Val: []byte("val2"), Op: PUT}, respWant: Response{Status: SUCCESS, Error: "", Val: nil}},
-		{req: Request{Key: []byte("key2"), Op: GET}, respWant: Response{Status: SUCCESS, Error: "", Val: []byte("val2")}},
-		{req: Request{Key: []byte("key1"), Op: GET}, respWant: Response{Status: FAILURE, Error: ErrKeyDoesNotExist.Error(), Val: nil}},
+		{req: &communication.Request{Key: []byte("key2"), Val: []byte("val2"), Op: communication.Operation_PUT}, respWant: &communication.Response{Status: communication.Status_SUCCESS, Error: "", Val: nil}},
+		{req: &communication.Request{Key: []byte("key2"), Op: communication.Operation_GET}, respWant: &communication.Response{Status: communication.Status_SUCCESS, Error: "", Val: []byte("val2")}},
+		{req: &communication.Request{Key: []byte("key1"), Op: communication.Operation_GET}, respWant: &communication.Response{Status: communication.Status_FAILURE, Error: ErrKeyDoesNotExist.Error(), Val: nil}},
 	}
 
 	/* Wait Group to ensure test completes only when each request finishes */
@@ -63,23 +64,29 @@ func TestHandleConn(t *testing.T) {
 	for _, tc := range tcs {
 		wg.Add(1)
 
-		client, err := client.NewClient()
-		require.NoError(t, err)
-
 		req := tc.req
 
-		go func(respWant Response) {
+		go func(req *communication.Request, respWant *communication.Response) {
 			defer wg.Done()
-			client.MakeRequest(req.Key, req.Val, req.Op)
+
+			client, err := distdbclient.NewClient()
 			require.NoError(t, err)
 
-			var response Response
+			client.MakeRequest(&communication.Request{Key: req.Key, Val: req.Val, Op: req.Op})
+			require.NoError(t, err)
+
+			var response communication.Response
 			respData, err := client.RcvResponse()
+
 			require.NoError(t, err)
-			err = json.Unmarshal(respData, &response)
+			err = proto.Unmarshal(respData, &response)
 			require.NoError(t, err)
-			require.Equal(t, respWant, response)
-		}(tc.respWant)
+
+			require.Equal(t, respWant.Status, response.Status)
+			require.Equal(t, respWant.Error, response.Error)
+			require.Equal(t, respWant.Val, response.Val)
+
+		}(req, tc.respWant)
 	}
 
 	wg.Wait()

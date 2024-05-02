@@ -9,6 +9,9 @@ import (
 	"net"
 	"os"
 	"sync"
+
+	"github.com/chettriyuvraj/distributed-kv-store/protobuf/github.com/chettriyuvraj/distributed-kv-store/communication"
+	"google.golang.org/protobuf/proto"
 )
 
 var ErrKeyDoesNotExist = errors.New("this key does not exist")
@@ -19,21 +22,7 @@ const (
 	SERVER_PROTOCOL = "tcp"
 	SERVER_HOST     = "localhost"
 	SERVER_PORT     = "3108"
-	SUCCESS         = "SUCCESS"
-	FAILURE         = "FAILURE"
-	GET             = "GET"
-	PUT             = "PUT"
 )
-
-type Request struct {
-	Key, Val []byte
-	Op       string
-}
-
-type Response struct {
-	Status, Error string
-	Val           []byte
-}
 
 type DBEntry struct {
 	Key, Val []byte
@@ -77,6 +66,7 @@ func NewDB(config DBConfig) (*DB, error) {
 	}
 
 	db.f = f
+	db.Entries = append(db.Entries, entries...)
 	return db, nil
 }
 
@@ -114,42 +104,42 @@ func (db *DB) handleConn(conn net.Conn) error {
 		}
 
 		/* Unmarshal request sent as JSON */
-		var clientRequest Request
+		var clientRequest communication.Request
 		clientMessage := buffer[:clientMessageLen]
-		err = json.Unmarshal(clientMessage, &clientRequest)
+		err = proto.Unmarshal(clientMessage, &clientRequest)
 		if err != nil {
 			return err
 		}
 
 		/* Formulate response according to the operation requested */
-		var resp Response
+		var resp communication.Response
 		switch clientRequest.Op {
-		case GET:
+		case communication.Operation_GET:
 			fmt.Println("Handling GET request...")
 			val, err := db.Get(clientRequest.Key)
 			if err != nil {
 				resp.Error = err.Error()
-				resp.Status = FAILURE
+				resp.Status = communication.Status_FAILURE
 				break
 			}
 			resp.Val = val
-			resp.Status = SUCCESS
-		case PUT:
+			resp.Status = communication.Status_SUCCESS
+		case communication.Operation_PUT:
 			fmt.Println("Handling PUT request...")
 			err := db.Put(clientRequest.Key, clientRequest.Val)
 			if err != nil {
 				resp.Error = err.Error()
-				resp.Status = FAILURE
+				resp.Status = communication.Status_FAILURE
 				break
 			}
-			resp.Status = SUCCESS
+			resp.Status = communication.Status_SUCCESS
 		default:
 			resp.Error = ErrInvalidOperation.Error()
-			resp.Status = FAILURE
+			resp.Status = communication.Status_FAILURE
 		}
 
 		/* Marshal response to JSON */
-		respData, err := json.Marshal(resp)
+		respData, err := proto.Marshal(&resp)
 		if err != nil {
 			return err
 		}
@@ -158,9 +148,9 @@ func (db *DB) handleConn(conn net.Conn) error {
 		if _, err = conn.Write(respData); err != nil {
 			return err
 		}
+
 	}
 
-	return nil
 }
 
 func (db *DB) Get(key []byte) (val []byte, err error) {
@@ -195,6 +185,7 @@ func (db *DB) Put(key, val []byte) error {
 			}
 			return db.writeToDisk()
 		}
+
 		return err
 	}
 
@@ -202,6 +193,7 @@ func (db *DB) Put(key, val []byte) error {
 	if !db.config.Persist {
 		return nil
 	}
+
 	return db.writeToDisk()
 }
 
