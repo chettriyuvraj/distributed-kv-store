@@ -4,33 +4,18 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+
+	"github.com/chettriyuvraj/distributed-kv-store/protobuf/github.com/chettriyuvraj/distributed-kv-store/communication"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
 	SERVER_PROTOCOL = "tcp"
 	SERVER_HOST     = "localhost"
 	SERVER_PORT     = "3108"
-	GET             = "GET"
-	PUT             = "PUT"
-	SUCCESS         = "SUCCESS"
-	FAILURE         = "FAILURE"
 )
 
 var ErrInvalidOperation = errors.New("invalid operation")
-var requestTypes = map[string]bool{
-	GET: true,
-	PUT: true,
-}
-
-type Request struct {
-	Key, Val []byte
-	Op       string
-}
-
-type Response struct {
-	Status, Error string
-	Val           []byte
-}
 
 type Client struct {
 	serverConn net.Conn
@@ -46,7 +31,8 @@ func NewClient() (*Client, error) {
 }
 
 func (c *Client) Get(key []byte) ([]byte, error) {
-	err := c.MakeRequest(key, nil, GET)
+	req := communication.Request{Key: key, Op: communication.Operation_GET}
+	err := c.MakeRequest(&req)
 	if err != nil {
 		return nil, err
 	}
@@ -56,13 +42,13 @@ func (c *Client) Get(key []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	var response Response
-	err = json.Unmarshal(respData, &response)
+	var response communication.Response
+	err = proto.Unmarshal(respData, &response)
 	if err != nil {
 		return nil, err
 	}
 
-	if response.Status == FAILURE {
+	if response.Status == communication.Status_FAILURE {
 		return nil, errors.New(response.Error)
 	}
 
@@ -70,7 +56,8 @@ func (c *Client) Get(key []byte) ([]byte, error) {
 }
 
 func (c *Client) Put(key, val []byte) error {
-	err := c.MakeRequest(key, val, PUT)
+	req := communication.Request{Key: key, Val: val, Op: communication.Operation_PUT}
+	err := c.MakeRequest(&req)
 	if err != nil {
 		return err
 	}
@@ -80,28 +67,21 @@ func (c *Client) Put(key, val []byte) error {
 		return err
 	}
 
-	var response Response
+	var response communication.Response
 	err = json.Unmarshal(respData, &response)
 	if err != nil {
 		return err
 	}
 
-	if response.Status == FAILURE {
+	if response.Status == communication.Status_FAILURE {
 		return errors.New(response.Error)
 	}
 
 	return nil
 }
 
-func (c *Client) MakeRequest(key, val []byte, op string) error {
-	req := Request{Key: key, Val: val, Op: op}
-
-	_, exists := requestTypes[op]
-	if !exists {
-		return ErrInvalidOperation
-	}
-
-	data, err := json.Marshal(req)
+func (c *Client) MakeRequest(req *communication.Request) error {
+	data, err := proto.Marshal(req)
 	if err != nil {
 		return err
 	}
