@@ -1,5 +1,5 @@
 syntax = "proto3";
-package tutorial;
+package communication;
 
 option go_package = "github.com/chettriyuvraj/distributed-kv-store/communication";
 
@@ -10,8 +10,9 @@ message Request {
 }
 
 enum Operation {
-  GET = 0;
-  PUT = 1;
+  DUMMYOP = 0;
+  GET = 1;
+  PUT = 2;
 }
 
 message Response {
@@ -21,6 +22,7 @@ message Response {
 }
 
 enum Status {
-  SUCCESS = 0;
-  FAILURE = 1;
+  DUMMYSTATUS = 0;
+  SUCCESS = 1;
+  FAILURE = 2;
 }
