@@ -1,7 +1,6 @@
 package distdbclient
 
 import (
-	"encoding/json"
 	"errors"
 	"net"
 
@@ -68,7 +67,7 @@ func (c *Client) Put(key, val []byte) error {
 	}
 
 	var response communication.Response
-	err = json.Unmarshal(respData, &response)
+	err = proto.Unmarshal(respData, &response)
 	if err != nil {
 		return err
 	}
