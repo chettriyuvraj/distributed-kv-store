@@ -12,28 +12,32 @@ import (
 )
 
 const (
-	SERVER = "server"
-	CLIENT = "client"
+	SERVER                  = "server"
+	CLIENT                  = "client"
+	DEFAULT_SERVER_PROTOCOL = "tcp"
+	DEFAULT_SERVER_HOST     = "localhost"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatalf("usage: kv [client|server]")
+	if len(os.Args) < 3 {
+		log.Fatalf("usage: kv <'client'|'server'> <port> [filename]")
 	}
 
 	switch os.Args[1] {
 	case SERVER:
-		runServer()
+		port, filename := os.Args[2], os.Args[3]
+		runServer(port, filename)
 	case CLIENT:
-		runClient()
+		port := os.Args[2]
+		runClient(port)
 	default:
 		log.Fatalf("invalid argument")
 	}
 
 }
 
-func runServer() {
-	config := distdb.NewDBConfig(true)
+func runServer(port, filename string) {
+	config := distdb.DBConfig{Persist: true, Role: distdb.LEADER, DiskFileName: filename, ServerPort: port, ServerProtocol: DEFAULT_SERVER_PROTOCOL, ServerHost: DEFAULT_SERVER_HOST}
 	db, err := distdb.NewDB(config)
 	if err != nil {
 		log.Fatal(err)
@@ -45,8 +49,9 @@ func runServer() {
 	}
 }
 
-func runClient() {
-	client, err := distdbclient.NewClient()
+func runClient(port string) {
+	config := distdbclient.ClientConfig{ServerPort: port, ServerProtocol: DEFAULT_SERVER_PROTOCOL, ServerHost: DEFAULT_SERVER_HOST}
+	client, err := distdbclient.NewClient(config)
 	if err != nil {
 		log.Fatal(err)
 	}
