@@ -16,17 +16,23 @@ const (
 
 var ErrInvalidOperation = errors.New("invalid operation")
 
+type ClientConfig struct {
+	ServerProtocol string
+	ServerHost     string
+	ServerPort     string
+}
 type Client struct {
 	serverConn net.Conn
+	config     ClientConfig
 }
 
-func NewClient() (*Client, error) {
-	serverConn, err := net.Dial(SERVER_PROTOCOL, SERVER_HOST+":"+SERVER_PORT)
+func NewClient(config ClientConfig) (*Client, error) {
+	serverConn, err := net.Dial(config.ServerProtocol, config.ServerHost+":"+config.ServerPort)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{serverConn: serverConn}, nil
+	return &Client{serverConn: serverConn, config: config}, nil
 }
 
 func (c *Client) Get(key []byte) ([]byte, error) {

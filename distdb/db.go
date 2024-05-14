@@ -17,11 +17,11 @@ import (
 var ErrKeyDoesNotExist = errors.New("this key does not exist")
 var ErrInvalidOperation = errors.New("invalid operation")
 
+/* Roles for the DB */
 const (
-	DISKFILENAME    = "dbdump"
-	SERVER_PROTOCOL = "tcp"
-	SERVER_HOST     = "localhost"
-	SERVER_PORT     = "3108"
+	_ = iota
+	LEADER
+	FOLLOWER
 )
 
 type DBEntry struct {
@@ -36,11 +36,12 @@ type DB struct {
 }
 
 type DBConfig struct {
-	Persist bool
-}
-
-func NewDBConfig(persist bool) DBConfig {
-	return DBConfig{Persist: persist}
+	Persist        bool
+	Role           int
+	DiskFileName   string
+	ServerProtocol string
+	ServerHost     string
+	ServerPort     string
 }
 
 func NewDB(config DBConfig) (*DB, error) {
@@ -51,7 +52,7 @@ func NewDB(config DBConfig) (*DB, error) {
 	}
 
 	/* If persistant open file, get data and keep it in memory */
-	f, err := os.OpenFile(DISKFILENAME, os.O_RDWR|os.O_CREATE, 0777)
+	f, err := os.OpenFile(config.DiskFileName, os.O_RDWR|os.O_CREATE, 0777)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +76,7 @@ func newDBEntry(key, val []byte) DBEntry {
 }
 
 func (db *DB) Listen() error {
-	server, err := net.Listen(SERVER_PROTOCOL, SERVER_HOST+":"+SERVER_PORT)
+	server, err := net.Listen(db.config.ServerProtocol, db.config.ServerHost+":"+db.config.ServerPort)
 	if err != nil {
 		return err
 	}

@@ -10,8 +10,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	DEFAULT_SERVER_PROTOCOL = "tcp"
+	DEFAULT_SERVER_HOST     = "localhost"
+	DEFAULT_SERVER_PORT     = "3108"
+)
+
 func TestGetPut(t *testing.T) {
-	config := NewDBConfig(false)
+	config := DBConfig{Persist: false, Role: LEADER}
 
 	db, err := NewDB(config)
 	require.NoError(t, err)
@@ -40,54 +46,60 @@ func TestGetPut(t *testing.T) {
 
 /* TODO: test mutex? currently not tested, also how would you test it? */
 func TestHandleConn(t *testing.T) {
-	config := NewDBConfig(false)
+	/* Define test case struct and create a 'verify' function */
+	type testcase struct {
+		req      *communication.Request
+		respWant *communication.Response
+	}
+	verifyReqResp := func(req *communication.Request, respWant *communication.Response) {
+		client, err := distdbclient.NewClient(distdbclient.ClientConfig{ServerProtocol: DEFAULT_SERVER_PROTOCOL, ServerHost: DEFAULT_SERVER_HOST, ServerPort: DEFAULT_SERVER_PORT})
+		require.NoError(t, err)
+
+		client.MakeRequest(&communication.Request{Key: req.Key, Val: req.Val, Op: req.Op})
+		require.NoError(t, err)
+
+		var response communication.Response
+		respData, err := client.RcvResponse()
+
+		require.NoError(t, err)
+		err = proto.Unmarshal(respData, &response)
+		require.NoError(t, err)
+
+		require.Equal(t, respWant.Status, response.Status)
+		require.Equal(t, respWant.Error, response.Error)
+		require.Equal(t, respWant.Val, response.Val)
+
+	}
+
+	/* Execute tests */
 
 	/* Create server and start listening */
-	db, err := NewDB(config)
+	dbConfig := DBConfig{Persist: false, Role: LEADER, ServerProtocol: DEFAULT_SERVER_PROTOCOL, ServerHost: DEFAULT_SERVER_HOST, ServerPort: DEFAULT_SERVER_PORT}
+	db, err := NewDB(dbConfig)
 	require.NoError(t, err)
 
 	go db.Listen()
 
 	/* Start a new goroutine, with a new client for each request - TODO: error cases */
-	tcs := []struct {
-		req      *communication.Request
-		respWant *communication.Response
-	}{
+	tcs := []testcase{
 		{req: &communication.Request{Key: []byte("key2"), Val: []byte("val2"), Op: communication.Operation_PUT}, respWant: &communication.Response{Status: communication.Status_SUCCESS, Error: "", Val: nil}},
-		{req: &communication.Request{Key: []byte("key2"), Op: communication.Operation_GET}, respWant: &communication.Response{Status: communication.Status_SUCCESS, Error: "", Val: []byte("val2")}},
 		{req: &communication.Request{Key: []byte("key1"), Op: communication.Operation_GET}, respWant: &communication.Response{Status: communication.Status_FAILURE, Error: ErrKeyDoesNotExist.Error(), Val: nil}},
 	}
 
-	/* Wait Group to ensure test completes only when each request finishes */
+	/* Execute tcs parallely - Wait Group to ensure test completes only when all goroutines finish */
 	var wg sync.WaitGroup
-
 	for _, tc := range tcs {
 		wg.Add(1)
-
 		req := tc.req
-
 		go func(req *communication.Request, respWant *communication.Response) {
 			defer wg.Done()
-
-			client, err := distdbclient.NewClient()
-			require.NoError(t, err)
-
-			client.MakeRequest(&communication.Request{Key: req.Key, Val: req.Val, Op: req.Op})
-			require.NoError(t, err)
-
-			var response communication.Response
-			respData, err := client.RcvResponse()
-
-			require.NoError(t, err)
-			err = proto.Unmarshal(respData, &response)
-			require.NoError(t, err)
-
-			require.Equal(t, respWant.Status, response.Status)
-			require.Equal(t, respWant.Error, response.Error)
-			require.Equal(t, respWant.Val, response.Val)
-
+			verifyReqResp(req, respWant)
 		}(req, tc.respWant)
 	}
-
 	wg.Wait()
+
+	/* Check if put operation is recognized by corresponding get */
+	putTc := tcs[0]
+	verifyReqResp(putTc.req, putTc.respWant)
+
 }

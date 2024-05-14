@@ -9,14 +9,21 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const (
+	DEFAULT_SERVER_PROTOCOL = "tcp"
+	DEFAULT_SERVER_HOST     = "localhost"
+	DEFAULT_SERVER_PORT     = "3108"
+)
+
 func TestClientMakeRequest(t *testing.T) {
 	/* Create a dummy server to which we will send our request to */
-	server, err := net.Listen(SERVER_PROTOCOL, SERVER_HOST+":"+SERVER_PORT)
+	server, err := net.Listen(DEFAULT_SERVER_PROTOCOL, DEFAULT_SERVER_HOST+":"+DEFAULT_SERVER_PORT)
 	require.NoError(t, err)
 	defer server.Close()
 
 	/* Create client */
-	client, err := NewClient()
+	config := ClientConfig{ServerProtocol: DEFAULT_SERVER_PROTOCOL, ServerHost: DEFAULT_SERVER_HOST, ServerPort: DEFAULT_SERVER_PORT}
+	client, err := NewClient(config)
 	require.NoError(t, err)
 
 	/* Accept at server */
