@@ -14,6 +14,10 @@ const (
 	DEFAULT_SERVER_PROTOCOL = "tcp"
 	DEFAULT_SERVER_HOST     = "localhost"
 	DEFAULT_SERVER_PORT     = "3108"
+
+	DEFAULT_REPLICA_PROTOCOL = "tcp"
+	DEFAULT_REPLICA_HOST     = "localhost"
+	DEFAULT_REPLICA_PORT     = "3109"
 )
 
 func TestGetPut(t *testing.T) {
@@ -103,3 +107,47 @@ func TestHandleConn(t *testing.T) {
 	verifyReqResp(putTc.req, putTc.respWant)
 
 }
+
+/* Verifying if put requests to leader are replicated all the way to followers */
+func TestReplicationChain(t *testing.T) {
+	tcs := []struct {
+		k, v []byte
+	} {
+		{k: []byte("k1"), v: []byte("v1")},
+		{k: []byte("k2"), v: []byte("v2")},
+		{k: []byte("k3"), v: []byte("v3")},
+	}
+
+	/* Intiialize db and replica(s), start listening */
+	dbConfig := DBConfig{Persist: false, Role: LEADER, 
+		ServerProtocol: DEFAULT_SERVER_PROTOCOL, ServerHost: DEFAULT_SERVER_HOST, ServerPort: "3110",
+		ReplicaConfigs: []distdbclient.ClientConfig {
+			distdbclient.ClientConfig{ServerProtocol: DEFAULT_REPLICA_PROTOCOL, ServerHost: DEFAULT_REPLICA_HOST, ServerPort: DEFAULT_REPLICA_PORT},
+		},
+	}
+	db, err := NewDB(dbConfig)
+	require.NoError(t, err)
+
+	go func() {
+		err := db.Listen()
+		require.NoError(t, err)
+	}()
+
+	/* Make put requests using client */
+	client, err := distdbclient.NewClient(distdbclient.ClientConfig{ServerProtocol: DEFAULT_SERVER_PROTOCOL, ServerHost: DEFAULT_SERVER_HOST, ServerPort: DEFAULT_SERVER_PORT})
+	require.NoError(t, err)
+
+	for _, tc := range tcs {
+		req := &communication.Request{Key: tc.k, Val: tc.v, Op: communication.Operation_PUT}
+		err := client.MakeRequest(&communication.Request{Key: req.Key, Val: req.Val, Op: req.Op})
+		require.NoError(t, err)
+	}
+	
+	/* Wait till all workers are done */
+	for _, worker := range db.replicaWorkers {
+		<- worker.done
+	}
+
+}
+
+
